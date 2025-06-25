@@ -42,7 +42,8 @@ if faturas and geracoes and len(faturas) == len(geracoes):
         except:
             df_geracao = pd.read_excel(geracao, skiprows=6)  # fallback sem engine
 
-        gerado_kwh = df_geracao.iloc[:, 1].sum()  # Coluna de geração
+        coluna_geracao = pd.to_numeric(df_geracao.iloc[:, 1], errors="coerce")
+gerado_kwh = coluna_geracao.sum()
 
         # === Exibir Resultados ===
         st.subheader("🔎 Resultados")
