@@ -9,8 +9,8 @@ st.title("☀️ Analisador de Geração e Consumo - Pós Energia Solar")
 st.markdown("Envie a fatura da Copel e o relatório de geração (XLS) para análise do desempenho do sistema solar.")
 
 # Uploads
-fatura = st.file_uploader("📄 Enviar fatura (PDF):", type=["pdf"])
-geracao = st.file_uploader("📊 Enviar geração (XLS):", type=["xls", "xlsx"])
+faturas = st.file_uploader("📄 Enviar fatura (PDF):", type=["pdf"], accept_multiple_files=True)
+geracoes = st.file_uploader("📊 Enviar geração (XLS):", type=["xls", "xlsx"], accept_multiple_files=True)
 
 if fatura and geracao:
     st.success("Arquivos carregados. Pronto para analisar.")
