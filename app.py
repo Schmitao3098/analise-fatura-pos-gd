@@ -25,8 +25,8 @@ def extrair_dados_pdf(texto):
     injecao_match = re.search(r"ENERGIA INJETADA.*?(\d{1,6})\s", texto)
     consumo_match = re.search(r"ENERGIA ELET CONSUMO\s+(\d{1,6})", texto)
     credito_match = re.search(r"Saldo Acumulado.*?Todos os Períodos\s+(\d{1,6})", texto)
-    data_ini_match = re.search(r"Leitura anterior\s*[:\-]?\s*(\d{2}\/\d{2}\/\d{4})", texto, re.IGNORECASE)
-    data_fim_match = re.search(r"Leitura atual\s*[:\-]?\s*(\d{2}\/\d{2}\/\d{4})", texto, re.IGNORECASE)
+    data_ini_match = re.search(r"Leitura anterior\s*(\d{2}/\d{2}/\d{4})", texto)
+    data_fim_match = re.search(r"Leitura atual\s*(\d{2}/\d{2}/\d{4})", texto)
 
     energia_injetada = int(injecao_match.group(1)) if injecao_match else 0
     energia_consumida = int(consumo_match.group(1)) if consumo_match else 0
