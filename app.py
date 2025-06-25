@@ -20,14 +20,14 @@ def extrair_texto_pdf(fatura):
     return texto
 
 # Verifica se o número de arquivos bate
-if faturas and geracoes and len(faturas) == len(geracoes):
+if faturas and geracoes:
     for fatura, geracao in zip(faturas, geracoes):
-        st.markdown("---")
-        st.subheader(f"📄 Análise: {fatura.name}")
+        texto = extrair_texto_pdf(fatura)
+        df_geracao = pd.read_excel(geracao, skiprows=6)
 
-        texto = extrair_texto_pdf(fatura)  # Aqui o PDF já é lido corretamente!
+        coluna_geracao = pd.to_numeric(df_geracao.iloc[:, 1], errors="coerce")
+        gerado_kwh = coluna_geracao.sum()
 
-        # Extrair dados via regex
         injecao_match = re.search(r"Injetada.*?(\d{3,6})\s*kWh", texto)
         consumo_match = re.search(r"Consumo.*?(\d{3,6})\s*kWh", texto)
         credito_match = re.search(r"Crédito.*?disponível.*?(\d{1,6})", texto)
@@ -36,14 +36,9 @@ if faturas and geracoes and len(faturas) == len(geracoes):
         energia_consumida = int(consumo_match.group(1)) if consumo_match else 0
         creditos = int(credito_match.group(1)) if credito_match else 0
 
-        # === Ler XLS da geração ===
-        try:
-            df_geracao = pd.read_excel(geracao, skiprows=6, engine="xlrd")
-        except:
-            df_geracao = pd.read_excel(geracao, skiprows=6)  # fallback sem engine
-
-        coluna_geracao = pd.to_numeric(df_geracao.iloc[:, 1], errors="coerce")
-gerado_kwh = coluna_geracao.sum()
+        # ⚠️ Essa linha aqui tem que estar alinhada corretamente!
+        st.subheader("🔎 Resultados")
+        st.write(f"🔋 Geração total no mês: **{gerado_kwh:.2f} kWh**")
 
         # === Exibir Resultados ===
         st.subheader("🔎 Resultados")
