@@ -12,8 +12,12 @@ st.markdown("Envie a fatura da Copel e o relatório de geração (XLS) para aná
 faturas = st.file_uploader("📄 Enviar fatura (PDF):", type=["pdf"], accept_multiple_files=True)
 geracoes = st.file_uploader("📊 Enviar geração (XLS):", type=["xls", "xlsx"], accept_multiple_files=True)
 
-if fatura and geracao:
-    st.success("Arquivos carregados. Pronto para analisar.")
+if faturas and geracoes:
+    for fatura, geracao in zip(faturas, geracoes):
+        texto = extrair_texto_pdf(fatura)
+        df_geracao = pd.read_excel(geracao, skiprows=6)
+
+        # continue com análise...
 
     # === Ler PDF da fatura ===
     texto = ""
