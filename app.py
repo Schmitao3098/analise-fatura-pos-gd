@@ -25,9 +25,9 @@ if faturas and geracoes and len(faturas) == len(geracoes):
         st.markdown("---")
         st.subheader(f"📄 Análise: {fatura.name}")
 
-        # === Extrair dados da fatura ===
-        texto = extrair_texto_pdf(fatura)
+        texto = extrair_texto_pdf(fatura)  # Aqui o PDF já é lido corretamente!
 
+        # Extrair dados via regex
         injecao_match = re.search(r"Injetada.*?(\d{3,6})\s*kWh", texto)
         consumo_match = re.search(r"Consumo.*?(\d{3,6})\s*kWh", texto)
         credito_match = re.search(r"Crédito.*?disponível.*?(\d{1,6})", texto)
