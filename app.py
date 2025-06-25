@@ -37,15 +37,21 @@ def extrair_dados_pdf(texto):
 def extrair_gerado_xls(geracao):
     try:
         df = pd.read_excel(geracao, skiprows=6)
-        for col in df.columns:
-            try:
-                valores = pd.to_numeric(df[col], errors="coerce")
-                total = valores.sum()
-                if total > 0:
-                    return total
-            except:
-                continue
-        return 0.0
+
+        # Exibe nomes das colunas para depuração
+        st.write("📋 Colunas encontradas no XLS:", df.columns.tolist())
+
+        # Ignora colunas não numéricas ou de tempo
+        colunas_validas = [col for col in df.columns if df[col].dtype in ['float64', 'int64'] and 'time' not in col.lower() and 'hora' not in col.lower()]
+
+        if not colunas_validas:
+            st.warning("Nenhuma coluna de geração encontrada no XLS.")
+            return 0.0
+
+        # Soma a primeira coluna válida (presume ser geração em kWh)
+        total = df[colunas_validas[0]].sum()
+        return total
+
     except Exception as e:
         st.error(f"Erro ao ler XLS: {e}")
         return 0.0
