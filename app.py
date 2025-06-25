@@ -2,15 +2,12 @@ import streamlit as st
 import pandas as pd
 import fitz  # PyMuPDF
 import re
+import openpyxl
 
 st.set_page_config(page_title="Analisador Pós-Solar", layout="centered")
 st.title("☀️ Analisador de Geração e Consumo - Pós Energia Solar")
 
 st.markdown("Envie a fatura da Copel e o relatório de geração (XLS) para análise do desempenho do sistema solar.")
-
-# Inputs de metas para análise técnica
-meta_kwh = st.number_input("🎯 Meta de geração (kWh/mês)", min_value=0, value=600)
-consumo_previsto = st.number_input("📌 Consumo previsto (kWh/mês)", min_value=0, value=700)
 
 # Uploads
 faturas = st.file_uploader("📄 Enviar fatura (PDF):", type=["pdf"], accept_multiple_files=True)
@@ -36,22 +33,17 @@ def extrair_dados_pdf(texto):
 
 def extrair_gerado_xls(geracao):
     try:
-        df = pd.read_excel(geracao, skiprows=6)
-
-        # Exibe nomes das colunas para depuração
-        st.write("📋 Colunas encontradas no XLS:", df.columns.tolist())
-
-        # Ignora colunas não numéricas ou de tempo
-        colunas_validas = [col for col in df.columns if df[col].dtype in ['float64', 'int64'] and 'time' not in col.lower() and 'hora' not in col.lower()]
-
-        if not colunas_validas:
-            st.warning("Nenhuma coluna de geração encontrada no XLS.")
-            return 0.0
-
-        # Soma a primeira coluna válida (presume ser geração em kWh)
-        total = df[colunas_validas[0]].sum()
-        return total
-
+        wb = openpyxl.load_workbook(geracao, data_only=True)
+        for sheet in wb.sheetnames:
+            aba = wb[sheet]
+            for row in aba.iter_rows(min_row=1, max_row=30):
+                for cell in row:
+                    if isinstance(cell.value, str) and "Monthly Yield(kWh):" in cell.value:
+                        match = re.search(r"Monthly Yield\(kWh\):\s*(\d+(?:\.\d+)?)", cell.value)
+                        if match:
+                            return float(match.group(1))
+        st.warning("⚠️ Valor de geração mensal não encontrado no XLS.")
+        return 0.0
     except Exception as e:
         st.error(f"Erro ao ler XLS: {e}")
         return 0.0
@@ -66,10 +58,10 @@ if faturas and geracoes:
 
         total_utilizado = energia_consumida + energia_injetada
         eficiencia = (gerado_kwh / total_utilizado * 100) if total_utilizado > 0 else 0
-        desempenho = (gerado_kwh / meta_kwh * 100) if meta_kwh > 0 else 0
-        consumo_total = energia_consumida + gerado_kwh
+        desempenho = (energia_injetada / gerado_kwh * 100) if gerado_kwh > 0 else 0
+        consumo_total = gerado_kwh  # nesse caso, se só tiver geração, o total estimado é esse
 
-        # Exibição
+        # Resultados
         st.subheader("🔍 Resultados")
         st.markdown(f"**📄 Fatura:** `{fatura.name}`")
         st.write(f"📊 Geração total no mês: **{gerado_kwh:.2f} kWh**")
@@ -78,17 +70,17 @@ if faturas and geracoes:
         st.write(f"💳 Créditos acumulados: **{creditos} kWh**")
         st.write(f"📈 Eficiência de uso da geração: **{eficiencia:.1f}%**")
         st.write(f"🎯 Desempenho da geração vs. meta: **{desempenho:.1f}%**")
-        st.write(f"📌 Consumo total estimado no mês: **{consumo_total:.2f} kWh**")
+        st.write(f"📍 Consumo total estimado no mês: **{consumo_total:.2f} kWh**")
 
-        # Recomendações
+        # Sugestões
         st.subheader("💡 Sugestões")
-        if desempenho < 80:
+        if gerado_kwh == 0:
             st.markdown("- ⚠️ Geração abaixo do esperado: verificar sombreamentos ou falhas no sistema.")
-        if energia_injetada > gerado_kwh * 0.5:
-            st.markdown("- 💡 Alta injeção na rede: consumo local está baixo, considerar redimensionar.")
-        if eficiencia < 70:
-            st.markdown("- 🧐 Baixa eficiência de uso: pode haver subutilização da geração.")
-        if consumo_total > consumo_previsto:
-            st.markdown("- ⚠️ Consumo total acima do projetado: cliente pode ter alterado o perfil de uso.")
         if creditos > 500:
-            st.markdown("- 💳 Créditos altos acumulados: avaliar excesso de geração ou subconsumo.")
+            st.markdown("- 🏦 Créditos acumulados altos: considere redimensionar o sistema.")
+        if desempenho < 70:
+            st.markdown("- 💡 Baixo desempenho de geração: possível problema de dimensionamento.")
+        if eficiencia < 70:
+            st.markdown("- 🤓 Baixa eficiência de uso: pode haver subutilização da geração.")
+        if energia_injetada > gerado_kwh * 0.7:
+            st.markdown("- 🔅 Alta injeção na rede: consumo local está baixo, considerar redimensionar.")
