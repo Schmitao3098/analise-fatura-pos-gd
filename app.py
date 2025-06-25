@@ -24,16 +24,18 @@ def extrair_dados_pdf(texto):
     injecao_match = re.search(r"ENERGIA INJETADA.*?(\d{1,6})\s", texto)
     consumo_match = re.search(r"ENERGIA ELET CONSUMO\s+(\d{1,6})", texto)
     credito_match = re.search(r"Saldo Acumulado.*?Todos os Períodos\s+(\d{1,6})", texto)
-    data_ini_match = re.search(r"Leitura anterior\s+(\d{2}/\d{2}/\d{4})", texto, re.IGNORECASE)
-    data_fim_match = re.search(r"Leitura atual\s+(\d{2}/\d{2}/\d{4})", texto, re.IGNORECASE)
+    data_ini_match = re.search(r"Leitura anterior\s*[:\-]?\s*(\d{2}\/\d{2}\/\d{4})", texto, re.IGNORECASE)
+    data_fim_match = re.search(r"Leitura atual\s*[:\-]?\s*(\d{2}\/\d{2}\/\d{4})", texto, re.IGNORECASE)
 
     energia_injetada = int(injecao_match.group(1)) if injecao_match else 0
     energia_consumida = int(consumo_match.group(1)) if consumo_match else 0
     creditos = int(credito_match.group(1)) if credito_match else 0
     data_inicio = datetime.strptime(data_ini_match.group(1), "%d/%m/%Y") if data_ini_match else None
     data_fim = datetime.strptime(data_fim_match.group(1), "%d/%m/%Y") if data_fim_match else None
+    st.text_area("🔎 Texto extraído do PDF:", texto, height=300)
 
     return energia_consumida, energia_injetada, creditos, data_inicio, data_fim
+    
 
 def extrair_gerado_xls_filtrado(arquivos, data_inicio, data_fim):
     total_kwh = 0.0
