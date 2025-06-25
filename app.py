@@ -33,9 +33,17 @@ def extrair_dados_pdf(texto):
 def extrair_gerado_xls(geracao):
     try:
         df = pd.read_excel(geracao, skiprows=6)
-        df = df.dropna(subset=[df.columns[1]])
-        gerado_kwh = df.iloc[:, 1].astype(str).str.replace(",", ".").astype(float).sum()
-        return gerado_kwh
+
+        # Tenta encontrar a primeira coluna numérica (valores de kWh)
+        for col in df.columns:
+            try:
+                valores = pd.to_numeric(df[col], errors="coerce")
+                total = valores.sum()
+                if total > 0:
+                    return total
+            except:
+                continue
+        return 0.0
     except Exception as e:
         st.error(f"Erro ao ler XLS: {e}")
         return 0.0
