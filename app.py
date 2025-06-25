@@ -13,6 +13,9 @@ st.markdown("Envie **uma fatura (PDF)** e **dois relatórios de geração (XLS)*
 fatura = st.file_uploader("📄 Enviar fatura (PDF):", type=["pdf"])
 geracoes = st.file_uploader("📊 Enviar dois relatórios de geração (XLS):", type=["xls", "xlsx"], accept_multiple_files=True)
 
+from PIL import Image
+import pytesseract
+
 def extrair_texto_pdf(fatura):
     texto = ""
     with fitz.open(stream=fatura.read(), filetype="pdf") as doc:
