@@ -16,7 +16,8 @@ geracoes = st.file_uploader("📊 Enviar dois relatórios de geração (XLS):", 
 def extrair_texto_pdf(fatura):
     texto = ""
     with fitz.open(stream=fatura.read(), filetype="pdf") as doc:
-        for page in doc:
+        for page_num in range(len(doc)):  # percorre todas as páginas
+            page = doc.load_page(page_num)
             texto += page.get_text()
     return texto
 
