@@ -1,5 +1,8 @@
-streamlit
 pandas
-PyMuPDF
-openpyxl
+streamlit
+fpdf
+pytesseract
+Pillow
+matplotlib
 xlrd
+PyMuPDF
