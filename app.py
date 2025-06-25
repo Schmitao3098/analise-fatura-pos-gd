@@ -16,9 +16,10 @@ geracoes = st.file_uploader("📊 Enviar dois relatórios de geração (XLS):", 
 def extrair_texto_pdf(fatura):
     texto = ""
     with fitz.open(stream=fatura.read(), filetype="pdf") as doc:
-        for page_num in range(len(doc)):  # percorre todas as páginas
-            page = doc.load_page(page_num)
-            texto += page.get_text()
+        for page in doc:
+            pix = page.get_pixmap()
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            texto += pytesseract.image_to_string(img, lang="por")
     return texto
 
 def extrair_dados_pdf(texto):
