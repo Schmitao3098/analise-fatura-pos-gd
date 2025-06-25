@@ -8,6 +8,10 @@ st.title("☀️ Analisador de Geração e Consumo - Pós Energia Solar")
 
 st.markdown("Envie a fatura da Copel e o relatório de geração (XLS) para análise do desempenho do sistema solar.")
 
+# Inputs de metas para análise técnica
+meta_kwh = st.number_input("🎯 Meta de geração (kWh/mês)", min_value=0, value=600)
+consumo_previsto = st.number_input("📌 Consumo previsto (kWh/mês)", min_value=0, value=700)
+
 # Uploads
 faturas = st.file_uploader("📄 Enviar fatura (PDF):", type=["pdf"], accept_multiple_files=True)
 geracoes = st.file_uploader("📊 Enviar geração (XLS):", type=["xls", "xlsx"], accept_multiple_files=True)
@@ -33,8 +37,6 @@ def extrair_dados_pdf(texto):
 def extrair_gerado_xls(geracao):
     try:
         df = pd.read_excel(geracao, skiprows=6)
-
-        # Tenta encontrar a primeira coluna numérica (valores de kWh)
         for col in df.columns:
             try:
                 valores = pd.to_numeric(df[col], errors="coerce")
@@ -58,6 +60,8 @@ if faturas and geracoes:
 
         total_utilizado = energia_consumida + energia_injetada
         eficiencia = (gerado_kwh / total_utilizado * 100) if total_utilizado > 0 else 0
+        desempenho = (gerado_kwh / meta_kwh * 100) if meta_kwh > 0 else 0
+        consumo_total = energia_consumida + gerado_kwh
 
         # Exibição
         st.subheader("🔍 Resultados")
@@ -67,9 +71,18 @@ if faturas and geracoes:
         st.write(f"🔁 Energia injetada na rede: **{energia_injetada} kWh**")
         st.write(f"💳 Créditos acumulados: **{creditos} kWh**")
         st.write(f"📈 Eficiência de uso da geração: **{eficiencia:.1f}%**")
+        st.write(f"🎯 Desempenho da geração vs. meta: **{desempenho:.1f}%**")
+        st.write(f"📌 Consumo total estimado no mês: **{consumo_total:.2f} kWh**")
 
+        # Recomendações
         st.subheader("💡 Sugestões")
-        if creditos > 500:
-            st.markdown("- ⚠️ Créditos acumulados altos: considere redimensionar o sistema.")
+        if desempenho < 80:
+            st.markdown("- ⚠️ Geração abaixo do esperado: verificar sombreamentos ou falhas no sistema.")
+        if energia_injetada > gerado_kwh * 0.5:
+            st.markdown("- 💡 Alta injeção na rede: consumo local está baixo, considerar redimensionar.")
         if eficiencia < 70:
-            st.markdown("- 🧐 Baixa eficiência: verifique se está havendo perdas ou subutilização.")
+            st.markdown("- 🧐 Baixa eficiência de uso: pode haver subutilização da geração.")
+        if consumo_total > consumo_previsto:
+            st.markdown("- ⚠️ Consumo total acima do projetado: cliente pode ter alterado o perfil de uso.")
+        if creditos > 500:
+            st.markdown("- 💳 Créditos altos acumulados: avaliar excesso de geração ou subconsumo.")
