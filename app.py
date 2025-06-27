@@ -3,87 +3,72 @@ import fitz  # PyMuPDF
 import re
 from datetime import datetime
 
-st.set_page_config(page_title="Consumo – Pós Energia Solar", layout="wide")
-st.title("🔍 Consumo – Pós Energia Solar")
+st.set_page_config(page_title="Consumo – Pós Energia Solar", layout="centered")
+st.title("🔎 Consumo – Pós Energia Solar")
 
-# Função para extrair texto do PDF
-def extrair_texto_pdf(pdf_file):
+# Upload da fatura PDF
+uploaded_fatura = st.file_uploader("📄 Envie a fatura (PDF):", type=["pdf"])
+texto_extraido = ""
+
+def extrair_texto_fatura(pdf_file):
     texto = ""
     with fitz.open(stream=pdf_file.read(), filetype="pdf") as doc:
         for page in doc:
             texto += page.get_text()
     return texto
 
-# Função para extrair datas e energia da fatura
 def extrair_dados_fatura(texto):
-    dados = {}
-
-    datas = re.findall(r'\b\d{2}/\d{2}/\d{4}\b', texto)
+    # Datas
+    datas = re.findall(r"\d{2}/\d{2}/\d{4}", texto)
+    data_inicio, data_fim = None, None
     if len(datas) >= 2:
-        try:
-            dados["leitura_inicio"] = datetime.strptime(datas[0], "%d/%m/%Y").date()
-            dados["leitura_fim"] = datetime.strptime(datas[1], "%d/%m/%Y").date()
-        except:
-            dados["leitura_inicio"] = None
-            dados["leitura_fim"] = None
-    else:
-        dados["leitura_inicio"] = None
-        dados["leitura_fim"] = None
+        data_inicio = datas[0]
+        data_fim = datas[1]
 
-    # Energia injetada (pode ser negativa na fatura)
-    match = re.search(r'ENERGIA INJETADA.*?(-?\d{1,4})\s*kWh', texto, re.IGNORECASE)
-    if match:
-        try:
-            dados["energia_injetada"] = abs(int(match.group(1)))
-        except:
-            dados["energia_injetada"] = 0
-    else:
-        dados["energia_injetada"] = 0
+    # Energia injetada (padrão Copel: "ENERGIA INJETADA" seguido por números com vírgula ou ponto)
+    inj_match = re.findall(r"ENERGIA INJETADA.*?[-–]?(\d+[\.,]?\d*)", texto.upper())
+    energia_injetada = float(inj_match[0].replace(',', '.')) if inj_match else 0.0
 
-    return dados
+    return data_inicio, data_fim, energia_injetada
 
-# Upload da fatura
-fatura = st.file_uploader("📄 Envie a fatura (PDF):", type=["pdf"])
+# === PROCESSAMENTO DA FATURA ===
+if uploaded_fatura:
+    texto_extraido = extrair_texto_fatura(uploaded_fatura)
+    data_inicio, data_fim, energia_injetada = extrair_dados_fatura(texto_extraido)
 
-if fatura:
-    texto = extrair_texto_pdf(fatura)
-    st.subheader("📑 Texto extraído da fatura:")
-    with st.expander("🔍 Ver texto"):
-        st.text(texto)
+    st.subheader("📄 Texto extraído da fatura:")
+    with st.expander("Ver texto"):
+        st.text(texto_extraido)
 
-    dados = extrair_dados_fatura(texto)
+    st.write("📅 **Data de leitura anterior:**", data_inicio or "Não encontrada")
+    st.write("📅 **Data de leitura atual:**", data_fim or "Não encontrada")
+    st.write("⚡ **Energia injetada identificada:**", f"{energia_injetada} kWh")
 
-    leitura_inicio = st.date_input("📆 Data de leitura anterior:", value=dados["leitura_inicio"])
-    leitura_fim = st.date_input("📆 Data de leitura atual:", value=dados["leitura_fim"])
-
-    energia_injetada = dados["energia_injetada"]
-    st.info(f"⚡ Energia injetada identificada: **{energia_injetada} kWh**")
-
-    # Entrada manual da geração
-    st.markdown("### ☀️ Informe manualmente a geração solar do período:")
-    geracao_total = st.number_input("Geração total no período (kWh):", min_value=0.0, value=0.0, step=0.01)
-
-    # Cálculos
-    consumo_estimado = energia_injetada  # ou outro modelo se desejar
-    eficiencia_uso = (consumo_estimado / geracao_total) * 100 if geracao_total else 0
-    desempenho_meta = (geracao_total / consumo_estimado) * 100 if consumo_estimado else 0
+    # Entrada manual da geração solar
+    st.subheader("🌞 Informe manualmente a geração solar do período:")
+    geracao = st.number_input("Geração total no período (kWh):", min_value=0.0, step=1.0)
 
     # Resultados
-    st.markdown("## 📊 Resultados")
-    st.write(f"📅 Período: {leitura_inicio} até {leitura_fim}")
-    st.write(f"🌞 Geração informada: **{geracao_total} kWh**")
-    st.write(f"⚡ Energia injetada na rede: **{energia_injetada} kWh**")
-    st.write(f"🔥 Consumo estimado: **{consumo_estimado} kWh**")
-    st.write(f"📈 Eficiência de uso da geração: **{eficiencia_uso:.2f}%**")
-    st.write(f"🎯 Desempenho da geração vs. meta: **{desempenho_meta:.2f}%**")
+    if geracao > 0:
+        st.subheader("📊 Resultados")
 
-    # Sugestões
-    st.markdown("## 💡 Sugestões")
-    if geracao_total == 0:
-        st.warning("⚠️ Geração zerada: verificar o sistema ou erro no lançamento.")
-    elif eficiencia_uso < 30:
-        st.info("😬 Baixa eficiência de uso: pode haver subutilização da geração.")
-    if desempenho_meta < 70:
-        st.info("💡 Baixo desempenho: avaliar dimensionamento do sistema.")
-    if energia_injetada > consumo_estimado * 0.8:
-        st.info("🌞 Alta injeção na rede: consumo local pode estar baixo.")
+        dias = (datetime.strptime(data_fim, "%d/%m/%Y") - datetime.strptime(data_inicio, "%d/%m/%Y")).days if data_inicio and data_fim else 30
+        consumo_estimado = round(geracao - energia_injetada, 2)
+        eficiencia = round(((geracao - energia_injetada) / geracao) * 100, 2) if geracao else 0
+        desempenho = round((geracao / 2850) * 100, 2)  # Meta hipotética de 2850 kWh
+
+        st.write("📆 Período:", f"{data_inicio} até {data_fim}")
+        st.write("🌞 Geração informada:", f"{geracao:.1f} kWh")
+        st.write("⚡ Energia injetada na rede:", f"{energia_injetada:.1f} kWh")
+        st.write("🔥 Consumo estimado:", f"{consumo_estimado:.1f} kWh")
+        st.write("📈 Eficiência de uso da geração:", f"{eficiencia:.2f}%")
+        st.write("🎯 Desempenho da geração vs. meta:", f"{desempenho:.2f}%")
+
+        # Sugestões
+        st.subheader("💡 Sugestões")
+        if eficiencia < 50:
+            st.info("🤔 Baixa eficiência de uso: pode haver subutilização da geração.")
+        if desempenho < 70:
+            st.warning("📉 Baixo desempenho: avaliar dimensionamento do sistema.")
+        if energia_injetada > (geracao * 0.5):
+            st.warning("🔁 Alta injeção na rede: consumo local está baixo, considerar redimensionar.")
