@@ -1,79 +1,79 @@
 import streamlit as st
 import fitz  # PyMuPDF
-from datetime import datetime
 import re
 
-st.set_page_config(page_title="Analisador Solar Copel", layout="centered")
-st.title("☀️ Analisador Solar - Fatura Copel")
+st.set_page_config(page_title="Consumo – Pós Energia Solar", layout="centered")
+st.title("🔍 Consumo – Pós Energia Solar")
 st.markdown("Envie sua fatura (PDF) da Copel e informe a geração do sistema no período para análise completa.")
 
-# Upload fatura
-fatura = st.file_uploader("📄 Enviar fatura da Copel (PDF):", type=["pdf"])
+# Upload da fatura PDF
+uploaded_file = st.file_uploader("📄 Enviar fatura da Copel (PDF):", type=["pdf"])
 
-# Função para extrair texto do PDF
-def extrair_texto_pdf(f):
+# Funções auxiliares para extração dos dados do PDF
+def extrair_texto_pdf(file):
     texto = ""
-    with fitz.open(stream=f.read(), filetype="pdf") as doc:
+    with fitz.open(stream=file.read(), filetype="pdf") as doc:
         for page in doc:
             texto += page.get_text()
     return texto
 
-# Função para extrair dados do texto
-
 def extrair_dados_fatura(texto):
-    injecao_match = re.search(r"ENERGIA INJETADA.*?-?(\d{1,5})", texto)
-    consumo_match = re.search(r"ENERGIA ELET CONSUMO\s+-?(\d{1,5})", texto)
-    credito_match = re.search(r"Saldo Acumulado.*?Todos os Períodos\s+(\d{1,6})", texto)
-    datas_match = re.findall(r"(\d{2}/\d{2}/\d{4})", texto)
+    dados = {}
 
-    energia_injetada = int(injecao_match.group(1)) if injecao_match else 0
-    energia_consumida = int(consumo_match.group(1)) if consumo_match else 0
-    creditos = int(credito_match.group(1)) if credito_match else 0
+    # Datas de leitura
+    match_datas = re.findall(r"(\d{2}/\d{2}/\d{4})", texto)
+    if len(match_datas) >= 2:
+        dados["leitura_inicio"] = match_datas[0]
+        dados["leitura_fim"] = match_datas[1]
 
-    data_inicio, data_fim = None, None
-    if len(datas_match) >= 2:
-        try:
-            data_inicio = datetime.strptime(datas_match[0], "%d/%m/%Y")
-            data_fim = datetime.strptime(datas_match[1], "%d/%m/%Y")
-        except:
-            pass
+    # Consumo
+    match_consumo = re.search(r"ENERGIA ELET CONSUMO\s+kWh\s+(\d+)", texto)
+    dados["consumo"] = int(match_consumo.group(1)) if match_consumo else 0
 
-    return energia_consumida, energia_injetada, creditos, data_inicio, data_fim
+    # Injeção TE
+    match_te = re.search(r"ENERGIA INJETADA TE.*?kWh\s+(-?\d+)", texto)
+    injetada_te = int(match_te.group(1)) if match_te else 0
 
-# Execução
-if fatura:
-    texto_fatura = extrair_texto_pdf(fatura)
-    consumo, injetada, creditos, inicio, fim = extrair_dados_fatura(texto_fatura)
+    # Injeção TUSD
+    match_tusd = re.search(r"ENERGIA INJETADA TUSD.*?kWh\s+(-?\d+)", texto)
+    injetada_tusd = int(match_tusd.group(1)) if match_tusd else 0
 
-    if not inicio or not fim:
-        st.error("❌ Não foi possível identificar a data de leitura na fatura.")
-    else:
-        st.success(f"📆 Período da leitura: {inicio.strftime('%d/%m/%Y')} a {fim.strftime('%d/%m/%Y')}")
+    dados["injetada"] = abs(injetada_te + injetada_tusd)
 
-        geracao_real = st.number_input("🔢 Informe a geração total do sistema no período (kWh):", min_value=0.0, step=0.1)
+    return dados
 
-        if geracao_real > 0:
-            total_utilizado = consumo + injetada
-            eficiencia = geracao_real / total_utilizado * 100 if total_utilizado else 0
-            aproveitamento_local = (geracao_real - injetada) / geracao_real * 100 if geracao_real else 0
-            sobra_credito = geracao_real - consumo if geracao_real > consumo else 0
+# Lógica principal do app
+if uploaded_file:
+    texto_extraido = extrair_texto_pdf(uploaded_file)
+    dados = extrair_dados_fatura(texto_extraido)
 
-            st.subheader("📊 Resultados da Análise")
-            st.write(f"🔌 Consumo da rede (Copel): **{consumo} kWh**")
-            st.write(f"⚡ Energia injetada (créditos): **{injetada} kWh**")
-            st.write(f"🔆 Geração real informada: **{geracao_real:.2f} kWh**")
-            st.write(f"💾 Aproveitamento local da geração: **{aproveitamento_local:.1f}%**")
-            st.write(f"📈 Eficiência total da geração: **{eficiencia:.1f}%**")
-            st.write(f"🏦 Estimativa de crédito acumulado: **{sobra_credito:.1f} kWh**")
+    with st.container():
+        st.success(f"📅 Período da leitura: {dados.get('leitura_inicio', 'N/A')} a {dados.get('leitura_fim', 'N/A')}")
 
-            st.subheader("💡 Interpretação")
-            if aproveitamento_local < 60:
-                st.markdown("- ⚠️ Alta injeção na rede: o consumo local está baixo. Avalie redimensionamento ou uso de grid zero.")
-            if eficiencia < 70:
-                st.markdown("- 🔍 Baixa eficiência da geração: geração abaixo do esperado para o consumo.")
-            if sobra_credito > 200:
-                st.markdown("- 🏦 Muitos créditos sobrando: pode estar gerando mais do que consome.")
+    # Campo para informar a geração real
+    geracao_manual = st.number_input("🔢 Informe a geração total do sistema no período (kWh):", min_value=0.0, step=0.1, format="%.2f")
+
+    if geracao_manual > 0:
+        consumo_rede = dados["consumo"]
+        energia_injetada = dados["injetada"]
+        geracao_total = geracao_manual
+        eficiencia_local = ((geracao_total - energia_injetada) / geracao_total) * 100 if geracao_total else 0
+        eficiencia_total = (geracao_total / consumo_rede) * 100 if consumo_rede else 0
+        creditos = geracao_total - consumo_rede
+
+        st.markdown("---")
+        st.subheader("📊 Resultados da Análise")
+        st.write(f"📥 Consumo da rede (Copel): **{consumo_rede} kWh**")
+        st.write(f"⚡ Energia injetada (créditos): **{energia_injetada} kWh**")
+        st.write(f"🌞 Geração real informada: **{geracao_total} kWh**")
+        st.write(f"🎯 Aproveitamento local da geração: **{eficiencia_local:.1f}%**")
+        st.write(f"📈 Eficiência total da geração: **{eficiencia_total:.1f}%**")
+        st.write(f"💳 Estimativa de crédito acumulado: **{creditos:.2f} kWh**")
+
+        st.subheader("🧠 Interpretação")
+        if creditos > 0:
+            st.info("🔋 Muitos créditos sobrando: pode estar gerando mais do que consome.")
+        elif creditos < 0:
+            st.warning("⚠️ Geração insuficiente: pode haver necessidade de redimensionamento.")
         else:
-            st.info("ℹ️ Informe a geração real para calcular os resultados.")
-else:
-    st.info("📥 Envie a fatura da Copel para iniciar a análise.")
+            st.success("✅ Geração equilibrada com o consumo.")
