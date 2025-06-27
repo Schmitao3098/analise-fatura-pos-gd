@@ -1,79 +1,70 @@
 import streamlit as st
-import fitz  # PyMuPDF
-import re
+from fpdf import FPDF
+import io
 
-st.set_page_config(page_title="Consumo – Pós Energia Solar", layout="centered")
-st.title("🔍 Consumo – Pós Energia Solar")
-st.markdown("Envie sua fatura (PDF) da Copel e informe a geração do sistema no período para análise completa.")
+st.set_page_config(page_title="Analisador Solar Interativo", layout="centered")
+st.title("🔎 Consumo – Pós Energia Solar")
 
-# Upload da fatura PDF
-uploaded_file = st.file_uploader("📄 Enviar fatura da Copel (PDF):", type=["pdf"])
+st.markdown("Envie sua fatura da Copel e informe a geração do sistema no período para análise completa.")
 
-# Funções auxiliares para extração dos dados do PDF
-def extrair_texto_pdf(file):
-    texto = ""
-    with fitz.open(stream=file.read(), filetype="pdf") as doc:
-        for page in doc:
-            texto += page.get_text()
-    return texto
+# Entrada manual
+st.subheader("📅 Período de leitura")
+data_inicio = st.date_input("Data da leitura anterior (início):")
+data_fim = st.date_input("Data da leitura atual (fim):")
 
-def extrair_dados_fatura(texto):
-    dados = {}
+st.subheader("🏠 Informe os dados da fatura")
+consumo_copel = st.number_input("Consumo da rede (Copel) - kWh", min_value=0.0, step=1.0)
+injetado = st.number_input("Energia injetada na rede - kWh", min_value=0.0, step=1.0)
+gerado = st.number_input("Geração total do sistema no período - kWh", min_value=0.0, step=1.0)
 
-    # Datas de leitura
-    match_datas = re.findall(r"(\d{2}/\d{2}/\d{4})", texto)
-    if len(match_datas) >= 2:
-        dados["leitura_inicio"] = match_datas[0]
-        dados["leitura_fim"] = match_datas[1]
+# Cálculos
+if gerado > 0:
+    aproveitamento = ((gerado - injetado) / gerado) * 100
+    eficiencia = (gerado / (consumo_copel + 1)) * 100  # evita divisão por zero
+    credito_estimado = max(0, gerado - consumo_copel)
+else:
+    aproveitamento = eficiencia = credito_estimado = 0
 
-    # Consumo
-    match_consumo = re.search(r"ENERGIA ELET CONSUMO\s+kWh\s+(\d+)", texto)
-    dados["consumo"] = int(match_consumo.group(1)) if match_consumo else 0
+# Resultados
+st.subheader("📊 Resultados da Análise")
+st.markdown(f"**📅 Período:** {data_inicio} até {data_fim}")
+st.markdown(f"**🌳 Geração informada:** {gerado:.2f} kWh")
+st.markdown(f"**⚡ Energia injetada (créditos):** {injetado:.2f} kWh")
+st.markdown(f"**🔥 Consumo informado da Copel:** {consumo_copel:.2f} kWh")
+st.markdown(f"**📈 Aproveitamento local da geração:** {aproveitamento:.2f}%")
+st.markdown(f"**🔢 Eficiência total da geração:** {eficiencia:.2f}%")
+st.markdown(f"**🌎 Estimativa de crédito acumulado:** {credito_estimado:.2f} kWh")
 
-    # Injeção TE
-    match_te = re.search(r"ENERGIA INJETADA TE.*?kWh\s+(-?\d+)", texto)
-    injetada_te = int(match_te.group(1)) if match_te else 0
+# Interpretação
+st.subheader("🧐 Interpretação")
+if gerado > consumo_copel:
+    st.markdown("- 📈 Muitos créditos sobrando: pode estar gerando mais do que consome.")
+elif gerado < consumo_copel * 0.7:
+    st.markdown("- 🚫 Baixa geração: sistema pode estar subdimensionado ou com falhas.")
+else:
+    st.markdown("- ✅ Sistema com geração adequada ao consumo.")
 
-    # Injeção TUSD
-    match_tusd = re.search(r"ENERGIA INJETADA TUSD.*?kWh\s+(-?\d+)", texto)
-    injetada_tusd = int(match_tusd.group(1)) if match_tusd else 0
+# Exportar para PDF
+def exportar_pdf():
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, "Relatório Solar - Análise de Consumo", ln=True, align="C")
 
-    dados["injetada"] = abs(injetada_te + injetada_tusd)
+    pdf.set_font("Arial", size=12)
+    pdf.ln(10)
+    pdf.cell(200, 10, f"Período: {data_inicio} a {data_fim}", ln=True)
+    pdf.cell(200, 10, f"Geração: {gerado:.2f} kWh | Injetado: {injetado:.2f} kWh", ln=True)
+    pdf.cell(200, 10, f"Consumo da rede: {consumo_copel:.2f} kWh", ln=True)
+    pdf.cell(200, 10, f"Aproveitamento: {aproveitamento:.2f}%", ln=True)
+    pdf.cell(200, 10, f"Eficiência: {eficiencia:.2f}%", ln=True)
+    pdf.cell(200, 10, f"Créditos estimados: {credito_estimado:.2f} kWh", ln=True)
 
-    return dados
+    buffer = io.BytesIO()
+    pdf.output(buffer)
+    return buffer.getvalue()
 
-# Lógica principal do app
-if uploaded_file:
-    texto_extraido = extrair_texto_pdf(uploaded_file)
-    dados = extrair_dados_fatura(texto_extraido)
-
-    with st.container():
-        st.success(f"📅 Período da leitura: {dados.get('leitura_inicio', 'N/A')} a {dados.get('leitura_fim', 'N/A')}")
-
-    # Campo para informar a geração real
-    geracao_manual = st.number_input("🔢 Informe a geração total do sistema no período (kWh):", min_value=0.0, step=0.1, format="%.2f")
-
-    if geracao_manual > 0:
-        consumo_rede = dados["consumo"]
-        energia_injetada = dados["injetada"]
-        geracao_total = geracao_manual
-        eficiencia_local = ((geracao_total - energia_injetada) / geracao_total) * 100 if geracao_total else 0
-        eficiencia_total = (geracao_total / consumo_rede) * 100 if consumo_rede else 0
-        creditos = geracao_total - consumo_rede
-
-        st.markdown("---")
-        st.subheader("📊 Resultados da Análise")
-        st.write(f"📥 Consumo da rede (Copel): **{consumo_rede} kWh**")
-        st.write(f"⚡ Energia injetada (créditos): **{energia_injetada} kWh**")
-        st.write(f"🌞 Geração real informada: **{geracao_total} kWh**")
-        st.write(f"🎯 Aproveitamento local da geração: **{eficiencia_local:.1f}%**")
-        st.write(f"📈 Eficiência total da geração: **{eficiencia_total:.1f}%**")
-        st.write(f"💳 Estimativa de crédito acumulado: **{creditos:.2f} kWh**")
-
-        st.subheader("🧠 Interpretação")
-        if creditos > 0:
-            st.info("🔋 Muitos créditos sobrando: pode estar gerando mais do que consome.")
-        elif creditos < 0:
-            st.warning("⚠️ Geração insuficiente: pode haver necessidade de redimensionamento.")
-        else:
-            st.success("✅ Geração equilibrada com o consumo.")
+st.subheader("📄 Exportar")
+if st.button("🔹 Baixar Relatório em PDF"):
+    pdf_bytes = exportar_pdf()
+    st.download_button("📄 Clique aqui para baixar", data=pdf_bytes, file_name="relatorio_solar.pdf", mime="application/pdf")
