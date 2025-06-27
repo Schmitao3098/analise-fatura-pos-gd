@@ -19,13 +19,14 @@ def extrair_texto_pdf(fatura):
     return texto
 
 def extrair_dados_fatura(texto):
-    data_match = re.search(r"(\d{2}/\d{2}/\d{4})\s+(\d{2}/\d{2}/\d{4})", texto)
-    consumo_match = re.search(r"ENERGIA ELET CONSUMO.*?(\d{1,5})", texto)
-    injetada_match = re.search(r"ENERGIA INJETADA.*?(\d{1,5})", texto)
-    creditos_match = re.search(r"Saldo Acumulado.*?(\d{1,5})", texto)
+    datas = re.findall(r"\d{2}/\d{2}/\d{4}", texto)
+    data_inicio = datetime.strptime(datas[0], "%d/%m/%Y") if len(datas) >= 2 else None
+    data_fim = datetime.strptime(datas[1], "%d/%m/%Y") if len(datas) >= 2 else None
 
-    data_inicio = datetime.strptime(data_match.group(1), "%d/%m/%Y") if data_match else None
-    data_fim = datetime.strptime(data_match.group(2), "%d/%m/%Y") if data_match else None
+    consumo_match = re.search(r"ENERGIA ELET CONSUMO\s*\n?(\d+)", texto)
+    injetada_match = re.search(r"ENERGIA INJETADA.*?(\d+)", texto)
+    creditos_match = re.search(r"Saldo Acumulado.*?Todos os Períodos\s+(\d+)", texto)
+
     consumo = int(consumo_match.group(1)) if consumo_match else 0
     injetada = int(injetada_match.group(1)) if injetada_match else 0
     creditos = int(creditos_match.group(1)) if creditos_match else 0
