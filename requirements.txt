@@ -1,7 +1,6 @@
-pandas
 streamlit
-fpdf
-matplotlib
-xlrd
+pandas
 openpyxl
-pdfplumber
+xlrd
+PyMuPDF
+python-dateutil
