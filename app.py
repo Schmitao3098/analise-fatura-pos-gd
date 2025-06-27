@@ -1,82 +1,101 @@
 import streamlit as st
+import pandas as pd
 import fitz  # PyMuPDF
 import re
 from datetime import datetime
-import pandas as pd
 
+st.set_page_config(page_title="Consumo – Pós Energia Solar", layout="wide")
 st.title("🔍 Consumo – Pós Energia Solar")
 
-# ======== Uploads ==========
-fatura = st.file_uploader("📄 Envie a fatura (PDF):", type="pdf")
-
-# ========== Extrair texto da fatura ==========
-def extrair_texto_pdf(file):
-    doc = fitz.open(stream=file.read(), filetype="pdf")
+# Função para extrair texto do PDF
+def extrair_texto_pdf(pdf_file):
     texto = ""
-    for page in doc:
-        texto += page.get_text()
+    with fitz.open(stream=pdf_file.read(), filetype="pdf") as doc:
+        for page in doc:
+            texto += page.get_text()
     return texto
 
-# ========== Extrair datas de leitura ==========
-def encontrar_datas(texto):
-    padrao = r"(\d{2}/\d{2}/\d{4})"
-    datas = re.findall(padrao, texto)
+# Função para extrair datas e energia da fatura
+def extrair_dados_fatura(texto):
+    dados = {}
+
+    # Extrair datas
+    datas = re.findall(r'\b\d{2}/\d{2}/\d{4}\b', texto)
     if len(datas) >= 2:
-        inicio = datetime.strptime(datas[0], "%d/%m/%Y").date()
-        fim = datetime.strptime(datas[1], "%d/%m/%Y").date()
-        return inicio, fim
-    return None, None
-
-# ========== Extrair energia injetada ==========
-def extrair_injetada(texto):
-    padrao = r"ENERGIA INJETADA.*?(\d+)"
-    match = re.findall(padrao, texto)
-    if match:
-        return int(match[0])
-    return 0
-
-# ========== Processar Fatura ==========
-if fatura:
-    texto_fatura = extrair_texto_pdf(fatura)
-    st.subheader("📑 Texto extraído da fatura:")
-    st.text(texto_fatura)
-
-    data_inicio, data_fim = encontrar_datas(texto_fatura)
-    energia_injetada = extrair_injetada(texto_fatura)
-
-    if data_inicio and data_fim:
-        st.success(f"📅 Período detectado: {data_inicio} a {data_fim}")
+        try:
+            dados["leitura_inicio"] = datetime.strptime(datas[0], "%d/%m/%Y").date()
+            dados["leitura_fim"] = datetime.strptime(datas[1], "%d/%m/%Y").date()
+        except ValueError:
+            dados["leitura_inicio"] = None
+            dados["leitura_fim"] = None
     else:
-        st.warning("⚠️ Não foi possível detectar datas automaticamente.")
+        dados["leitura_inicio"] = None
+        dados["leitura_fim"] = None
 
-    # Dados manuais (caso extração falhe)
-    data_inicio = st.date_input("📆 Data da leitura anterior (início):", value=data_inicio or datetime.today())
-    data_fim = st.date_input("📆 Data da leitura atual (fim):", value=data_fim or datetime.today())
+    # Energia injetada
+    match_injetada = re.search(r'ENERGIA INJETADA.*?(-?\d{1,4})\s*kWh', texto, re.IGNORECASE)
+    if match_injetada:
+        try:
+            dados["energia_injetada"] = abs(int(match_injetada.group(1)))
+        except:
+            dados["energia_injetada"] = 0
+    else:
+        dados["energia_injetada"] = 0
 
-    # Entrada manual da geração no período
-    st.subheader("🔢 Insira a geração solar no período informado:")
-    geracao_total = st.number_input("Geração total no período (kWh):", min_value=0.0, step=0.1)
+    return dados
 
-    # Resultado
-    dias_periodo = (data_fim - data_inicio).days or 1
-    consumo_estimado = energia_injetada  # suposição simplificada
-    eficiencia = 0 if geracao_total == 0 else consumo_estimado / geracao_total * 100
-    desempenho = 0 if consumo_estimado == 0 else geracao_total / consumo_estimado * 100
+# Upload de arquivos
+fatura = st.file_uploader("📄 Envie a fatura (PDF):", type=["pdf"])
+relatorios = st.file_uploader("📊 Envie dois relatórios de geração (XLS/XLSX):", type=["xls", "xlsx"], accept_multiple_files=True)
 
-    # ====== Resultados ======
-    st.header("📊 Resultados")
-    st.markdown(f"📆 **Período informado:** {data_inicio} a {data_fim}")
-    st.markdown(f"☀️ **Geração total:** {geracao_total:.1f} kWh")
-    st.markdown(f"⚡ **Energia injetada na rede:** {energia_injetada:.1f} kWh")
-    st.markdown(f"📉 **Consumo estimado:** {consumo_estimado:.1f} kWh")
-    st.markdown(f"📈 **Eficiência de uso da geração:** {eficiencia:.2f}%")
-    st.markdown(f"🎯 **Desempenho da geração vs. meta:** {desempenho:.2f}%")
+# Processar fatura
+if fatura:
+    texto = extrair_texto_pdf(fatura)
+    st.subheader("📄 Texto extraído da fatura:")
+    with st.expander("Ver texto extraído"):
+        st.text(texto)
 
-    # ====== Sugestões ======
-    st.subheader("💡 Sugestões")
+    dados_fatura = extrair_dados_fatura(texto)
+
+    # Datas detectadas
+    st.success(f"📅 Período detectado: {dados_fatura['leitura_inicio']} a {dados_fatura['leitura_fim']}")
+
+    # Datas editáveis
+    leitura_inicio = st.date_input("📅 Data da leitura anterior (início):", value=dados_fatura["leitura_inicio"])
+    leitura_fim = st.date_input("📅 Data da leitura atual (fim):", value=dados_fatura["leitura_fim"])
+
+    # Geração solar (manual)
+    st.markdown("### 🔢 Insira a geração solar no período informado:")
+    geracao_total = st.number_input("Geração total no período (kWh):", min_value=0.0, value=0.0, step=0.01)
+
+    # Energia injetada na rede
+    energia_injetada = dados_fatura["energia_injetada"]
+
+    # Cálculos
+    consumo_estimado = energia_injetada  # Ajustar se necessário
+    eficiencia_uso = (consumo_estimado / geracao_total) * 100 if geracao_total else 0
+    desempenho_vs_meta = (geracao_total / consumo_estimado) * 100 if consumo_estimado else 0
+
+    st.markdown("## 📊 Resultados")
+    st.write(f"📆 **Período informado:** {leitura_inicio} a {leitura_fim}")
+    st.write(f"🌞 **Geração total:** {geracao_total} kWh")
+    st.write(f"⚡ **Energia injetada na rede:** {energia_injetada} kWh")
+    st.write(f"🔥 **Consumo estimado:** {consumo_estimado} kWh")
+    st.write(f"📈 **Eficiência de uso da geração:** {eficiencia_uso:.2f}%")
+    st.write(f"🎯 **Desempenho da geração vs. meta:** {desempenho_vs_meta:.2f}%")
+
+    # Sugestões
+    st.markdown("## 💡 Sugestões")
+    sugestoes = []
+
     if geracao_total == 0:
-        st.warning("⚠️ Geração zerada: verificar falhas ou sombreamento.")
-    elif eficiencia < 20:
-        st.info("🧊 Baixa eficiência: pode haver subutilização.")
-    elif desempenho < 50:
-        st.info("🔋 Geração abaixo do esperado: pode ser problema de dimensionamento.")
+        sugestoes.append("⚠️ Geração abaixo do esperado: verificar sombreamentos ou falhas no sistema.")
+    if eficiencia_uso < 30:
+        sugestoes.append("😬 Baixa eficiência de uso: pode haver subutilização da geração.")
+    if desempenho_vs_meta < 50 and geracao_total > 0:
+        sugestoes.append("💡 Baixo desempenho de geração: possível problema de dimensionamento.")
+    if energia_injetada > consumo_estimado * 0.8:
+        sugestoes.append("🌞 Alta injeção na rede: consumo local está baixo, considerar redimensionar.")
+
+    for s in sugestoes:
+        st.info(s)
