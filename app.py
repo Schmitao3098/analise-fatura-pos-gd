@@ -1,80 +1,82 @@
 import streamlit as st
-import pandas as pd
 import fitz  # PyMuPDF
+import re
 from datetime import datetime
-from dateutil import parser
+import pandas as pd
 
-def extrair_texto_pdf(arquivo_pdf):
+st.title("🔍 Consumo – Pós Energia Solar")
+
+# ======== Uploads ==========
+fatura = st.file_uploader("📄 Envie a fatura (PDF):", type="pdf")
+
+# ========== Extrair texto da fatura ==========
+def extrair_texto_pdf(file):
+    doc = fitz.open(stream=file.read(), filetype="pdf")
     texto = ""
-    with fitz.open(stream=arquivo_pdf.read(), filetype="pdf") as doc:
-        for pagina in doc:
-            texto += pagina.get_text()
+    for page in doc:
+        texto += page.get_text()
     return texto
 
-def extrair_datas_do_texto(texto):
-    try:
-        datas = []
-        for token in texto.split():
-            try:
-                data = parser.parse(token, dayfirst=True, fuzzy=False)
-                datas.append(data)
-            except:
-                continue
-        datas_ordenadas = sorted(list(set(datas)))
-        if len(datas_ordenadas) >= 2:
-            return datas_ordenadas[0].date(), datas_ordenadas[1].date()
-    except:
-        pass
+# ========== Extrair datas de leitura ==========
+def encontrar_datas(texto):
+    padrao = r"(\d{2}/\d{2}/\d{4})"
+    datas = re.findall(padrao, texto)
+    if len(datas) >= 2:
+        inicio = datetime.strptime(datas[0], "%d/%m/%Y").date()
+        fim = datetime.strptime(datas[1], "%d/%m/%Y").date()
+        return inicio, fim
     return None, None
 
-def calcular_geracao_total(planilhas, data_inicio, data_fim):
-    total = 0.0
-    for planilha in planilhas:
-        df = pd.read_excel(planilha)
-        col_data = [col for col in df.columns if "data" in col.lower()][0]
-        col_geracao = [col for col in df.columns if "ger" in col.lower()][0]
-        df[col_data] = pd.to_datetime(df[col_data]).dt.date
-        df = df[(df[col_data] >= data_inicio) & (df[col_data] <= data_fim)]
-        total += df[col_geracao].sum()
-    return total
+# ========== Extrair energia injetada ==========
+def extrair_injetada(texto):
+    padrao = r"ENERGIA INJETADA.*?(\d+)"
+    match = re.findall(padrao, texto)
+    if match:
+        return int(match[0])
+    return 0
 
-st.title("🔎 Consumo – Pós Energia Solar")
-
-# Uploads
-fatura = st.file_uploader("📄 Envie a fatura (PDF):", type="pdf")
-planilhas = st.file_uploader("📊 Envie dois relatórios de geração (XLSX):", type=["xls", "xlsx"], accept_multiple_files=True)
-
+# ========== Processar Fatura ==========
 if fatura:
     texto_fatura = extrair_texto_pdf(fatura)
-    st.markdown("### 📝 Texto extraído da fatura:")
+    st.subheader("📑 Texto extraído da fatura:")
     st.text(texto_fatura)
 
-    # Tenta extrair datas
-    data_inicio, data_fim = extrair_datas_do_texto(texto_fatura)
-    col1, col2 = st.columns(2)
-    with col1:
-        data_inicio = st.date_input("📅 Data da leitura anterior (início do período):", value=data_inicio)
-    with col2:
-        data_fim = st.date_input("📅 Data da leitura atual (fim do período):", value=data_fim)
+    data_inicio, data_fim = encontrar_datas(texto_fatura)
+    energia_injetada = extrair_injetada(texto_fatura)
 
-    if data_inicio and data_fim and planilhas:
-        try:
-            geracao_total = calcular_geracao_total(planilhas, data_inicio, data_fim)
-            energia_injetada = 5  # valor fixo de exemplo — substitua pela lógica real
-            consumo_rede = 0
-            creditos = 0
-            eficiencia = 0.0 if consumo_rede == 0 else consumo_rede / geracao_total
-            desempenho = (geracao_total / 5) * 100  # valor de meta fictícia
+    if data_inicio and data_fim:
+        st.success(f"📅 Período detectado: {data_inicio} a {data_fim}")
+    else:
+        st.warning("⚠️ Não foi possível detectar datas automaticamente.")
 
-            st.markdown("## 📊 Resultados")
-            st.write(f"📅 **Período informado:** {data_inicio} a {data_fim}")
-            st.write(f"🌞 **Geração total no período:** {geracao_total:.1f} kWh")
-            st.write(f"⚡ **Consumo da rede:** {consumo_rede} kWh")
-            st.write(f"🔌 **Energia injetada na rede:** {energia_injetada} kWh")
-            st.write(f"💳 **Créditos acumulados:** {creditos} kWh")
-            st.write(f"📈 **Eficiência de uso da geração:** {eficiencia:.1%}")
-            st.write(f"🎯 **Desempenho da geração vs. meta:** {desempenho:.1f}%")
-            st.write(f"📍 **Consumo total estimado no período:** {energia_injetada} kWh")
+    # Dados manuais (caso extração falhe)
+    data_inicio = st.date_input("📆 Data da leitura anterior (início):", value=data_inicio or datetime.today())
+    data_fim = st.date_input("📆 Data da leitura atual (fim):", value=data_fim or datetime.today())
 
-        except Exception as e:
-            st.error(f"Erro ao processar planilhas: {e}")
+    # Entrada manual da geração no período
+    st.subheader("🔢 Insira a geração solar no período informado:")
+    geracao_total = st.number_input("Geração total no período (kWh):", min_value=0.0, step=0.1)
+
+    # Resultado
+    dias_periodo = (data_fim - data_inicio).days or 1
+    consumo_estimado = energia_injetada  # suposição simplificada
+    eficiencia = 0 if geracao_total == 0 else consumo_estimado / geracao_total * 100
+    desempenho = 0 if consumo_estimado == 0 else geracao_total / consumo_estimado * 100
+
+    # ====== Resultados ======
+    st.header("📊 Resultados")
+    st.markdown(f"📆 **Período informado:** {data_inicio} a {data_fim}")
+    st.markdown(f"☀️ **Geração total:** {geracao_total:.1f} kWh")
+    st.markdown(f"⚡ **Energia injetada na rede:** {energia_injetada:.1f} kWh")
+    st.markdown(f"📉 **Consumo estimado:** {consumo_estimado:.1f} kWh")
+    st.markdown(f"📈 **Eficiência de uso da geração:** {eficiencia:.2f}%")
+    st.markdown(f"🎯 **Desempenho da geração vs. meta:** {desempenho:.2f}%")
+
+    # ====== Sugestões ======
+    st.subheader("💡 Sugestões")
+    if geracao_total == 0:
+        st.warning("⚠️ Geração zerada: verificar falhas ou sombreamento.")
+    elif eficiencia < 20:
+        st.info("🧊 Baixa eficiência: pode haver subutilização.")
+    elif desempenho < 50:
+        st.info("🔋 Geração abaixo do esperado: pode ser problema de dimensionamento.")
