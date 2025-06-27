@@ -1,81 +1,78 @@
 import streamlit as st
 from fpdf import FPDF
-import datetime
+from datetime import datetime
+import io
 
-st.set_page_config(page_title="Consumo – Pós Energia Solar", layout="centered")
-
+st.set_page_config(page_title="🔎 Consumo – Pós Energia Solar", layout="centered")
 st.title("🔎 Consumo – Pós Energia Solar")
 st.markdown("Envie sua fatura da Copel e informe a geração do sistema no período para análise completa.")
 
-# === Entradas Manuais ===
+# 📆 PERÍODO
 st.header("📅 Período de leitura")
+data_inicio = st.date_input("Data da leitura anterior (início):", format="YYYY/MM/DD")
+data_fim = st.date_input("Data da leitura atual (fim):", format="YYYY/MM/DD")
 
-col1, col2 = st.columns(2)
-with col1:
-    data_inicio = st.date_input("Data da leitura anterior (início):", value=datetime.date.today().replace(day=1))
-with col2:
-    data_fim = st.date_input("Data da leitura atual (fim):", value=datetime.date.today())
-
+# 🧾 DADOS DA FATURA
 st.header("🏡 Informe os dados da fatura")
-col3, col4 = st.columns(2)
-with col3:
-    consumo_rede = st.number_input("Consumo da rede (Copel) - kWh", step=1.0, format="%.2f")
-with col4:
-    energia_injetada = st.number_input("Energia injetada na rede - kWh", step=1.0, format="%.2f")
+copel_consumo = st.number_input("Consumo da rede (Copel) - kWh", min_value=0.0, format="%.2f")
+energia_injetada = st.number_input("Energia injetada na rede - kWh", min_value=0.0, format="%.2f")
+geracao_real = st.number_input("Geração total do sistema no período (via inversor) - kWh", min_value=0.0, format="%.2f")
 
-geracao_total = st.number_input("Geração total do sistema no período - kWh", step=1.0, format="%.2f")
+# 📊 CÁLCULOS
+periodo = f"{data_inicio.strftime('%Y-%m-%d')} até {data_fim.strftime('%Y-%m-%d')}"
+aproveitamento_local = ((geracao_real - energia_injetada) / geracao_real * 100) if geracao_real else 0
+eficiencia_geracao = (geracao_real / copel_consumo * 100) if copel_consumo else 0
+credito_estimado = max(geracao_real - copel_consumo, 0)
 
-# === Cálculos ===
-if geracao_total > 0:
-    consumo_total = consumo_rede + energia_injetada
-    eficiencia_uso_local = (consumo_total / geracao_total) * 100 if geracao_total else 0
-    eficiencia_total = (geracao_total / consumo_total) * 100 if consumo_total else 0
-    creditos_estimados = max(0, geracao_total - consumo_total)
+# 📈 RESULTADOS
+st.header("📊 Resultados da Análise")
+st.markdown(f"📅 **Período:** {periodo}")
+st.markdown(f"🌳 **Geração informada:** {geracao_real:.2f} kWh")
+st.markdown(f"⚡ **Energia injetada (créditos):** {energia_injetada:.2f} kWh")
+st.markdown(f"🔥 **Consumo informado da Copel:** {copel_consumo:.2f} kWh")
+st.markdown(f"📉 **Aproveitamento local da geração:** {aproveitamento_local:.2f}%")
+st.markdown(f"📏 **Eficiência total da geração:** {eficiencia_geracao:.2f}%")
+st.markdown(f"🪙 **Estimativa de crédito acumulado:** {credito_estimado:.2f} kWh")
 
-    st.header("📊 Resultados da Análise")
-    st.markdown(f"📅 **Período:** {data_inicio} até {data_fim}")
-    st.markdown(f"🌳 **Geração informada:** {geracao_total:.2f} kWh")
-    st.markdown(f"⚡ **Energia injetada (créditos):** {energia_injetada:.2f} kWh")
-    st.markdown(f"🔥 **Consumo informado da Copel:** {consumo_rede:.2f} kWh")
-    st.markdown(f"📈 **Aproveitamento local da geração:** {eficiencia_uso_local:.2f}%")
-    st.markdown(f"📏 **Eficiência total da geração:** {eficiencia_total:.2f}%")
-    st.markdown(f"🌐 **Estimativa de crédito acumulado:** {creditos_estimados:.2f} kWh")
+# 🧠 INTERPRETAÇÃO
+st.header("🥸 Interpretação")
+if credito_estimado > 500:
+    st.success("📌 Muitos créditos sobrando: pode estar gerando mais do que consome.")
+elif aproveitamento_local < 50:
+    st.warning("⚠️ Pouco aproveitamento local: verifique consumo diurno ou ajuste de carga.")
+else:
+    st.info("✅ Sistema com geração adequada ao consumo.")
 
-    st.header("🤓 Interpretação")
-    if creditos_estimados > geracao_total * 0.5:
-        st.markdown("🗂️ Muitos créditos sobrando: pode estar gerando mais do que consome.")
-    elif eficiencia_uso_local < 60:
-        st.markdown("⚠️ Baixo aproveitamento da geração local: avalie o perfil de consumo.")
-    else:
-        st.markdown("✅ Geração está bem dimensionada para o consumo.")
+# 📤 EXPORTAÇÃO PDF
+st.header("📄 Exportar")
+if st.button("📥 Baixar Relatório em PDF"):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt="Relatório - Consumo Pós Energia Solar", ln=True, align='C')
 
-    # === Exportar PDF ===
-    st.header("📄 Exportar")
-    if st.button("📥 Baixar Relatório em PDF"):
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, "Relatório de Análise Solar", ln=True, align="C")
-        pdf.set_font("Arial", "", 12)
-        pdf.ln(10)
-        pdf.cell(0, 10, f"Período de leitura: {data_inicio} até {data_fim}", ln=True)
-        pdf.cell(0, 10, f"Geração informada: {geracao_total:.2f} kWh", ln=True)
-        pdf.cell(0, 10, f"Consumo da rede (Copel): {consumo_rede:.2f} kWh", ln=True)
-        pdf.cell(0, 10, f"Créditos (energia injetada): {energia_injetada:.2f} kWh", ln=True)
-        pdf.cell(0, 10, f"Aproveitamento local da geração: {eficiencia_uso_local:.2f}%", ln=True)
-        pdf.cell(0, 10, f"Eficiência total: {eficiencia_total:.2f}%", ln=True)
-        pdf.cell(0, 10, f"Créditos estimados acumulados: {creditos_estimados:.2f} kWh", ln=True)
+    pdf.set_font("Arial", size=12)
+    pdf.ln(10)
+    pdf.cell(200, 10, txt=f"Período: {periodo}", ln=True)
+    pdf.cell(200, 10, txt=f"Geração total do sistema: {geracao_real:.2f} kWh", ln=True)
+    pdf.cell(200, 10, txt=f"Consumo da rede (Copel): {copel_consumo:.2f} kWh", ln=True)
+    pdf.cell(200, 10, txt=f"Energia injetada (créditos): {energia_injetada:.2f} kWh", ln=True)
+    pdf.cell(200, 10, txt=f"Aproveitamento local da geração: {aproveitamento_local:.2f}%", ln=True)
+    pdf.cell(200, 10, txt=f"Eficiência total da geração: {eficiencia_geracao:.2f}%", ln=True)
+    pdf.cell(200, 10, txt=f"Crédito acumulado estimado: {credito_estimado:.2f} kWh", ln=True)
 
-        if creditos_estimados > geracao_total * 0.5:
-            interpretacao = "Muitos créditos: pode estar gerando mais do que consome."
-        elif eficiencia_uso_local < 60:
-            interpretacao = "Baixo aproveitamento: avalie consumo vs geração."
-        else:
-            interpretacao = "Geração bem dimensionada para o consumo."
-        pdf.ln(5)
-        pdf.multi_cell(0, 10, f"Interpretação: {interpretacao}")
+    interpretacao = "Geração adequada ao consumo."
+    if credito_estimado > 500:
+        interpretacao = "Créditos altos acumulando: pode estar gerando mais que o necessário."
+    elif aproveitamento_local < 50:
+        interpretacao = "Baixo aproveitamento da geração: reavalie perfil de consumo."
 
-        pdf_path = "/mnt/data/relatorio_analise_solar.pdf"
-        pdf.output(pdf_path)
-        with open(pdf_path, "rb") as f:
-            st.download_button("📩 Baixar Relatório em PDF", data=f, file_name="relatorio_analise_solar.pdf", mime="application/pdf")
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt="Interpretação:", ln=True)
+    pdf.set_font("Arial", size=12)
+    pdf.multi_cell(0, 10, txt=interpretacao)
+
+    buffer = io.BytesIO()
+    pdf.output(buffer)
+    st.download_button("📎 Clique aqui para baixar o PDF", data=buffer.getvalue(), file_name="relatorio_energia_solar.pdf", mime="application/pdf")
